@@ -60,7 +60,6 @@ fn optimize_connection(connection: &Connection) -> Result<(), MBTileError> {
         .execute_batch(
             "
         PRAGMA synchronous=0;
-        PRAGMA locking_mode=EXCLUSIVE;
         PRAGMA journal_mode=DELETE;
         ",
         )
