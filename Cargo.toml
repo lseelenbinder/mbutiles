@@ -14,13 +14,14 @@ edition = "2021"
 docopt = "1.1.1"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.115"
-rusqlite = { version = "0.31.0", features = ["bundled"] }
+rusqlite = { version = "0.33.0", features = ["bundled"] }
 walkdir = "2.5.0"
 regex = "1.10.4"
 simplelog = "0.12.2"
 log = "0.4.21"
 flate2 = "1.0.28"
 thiserror = "1.0.58"
+rayon = "1.10.0"
 
 [dev-dependencies]
-serde_json_path = "0.6.7"
+serde_json_path = "0.7.1"

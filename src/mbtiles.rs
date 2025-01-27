@@ -14,6 +14,7 @@ use std::io::Cursor;
 use std::iter::Iterator;
 use std::path::{Component, Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
+use rayon::prelude::*;
 
 #[derive(Deserialize, Debug)]
 pub enum Command {
@@ -164,7 +165,9 @@ pub fn import<P: AsRef<Path>>(
     optimize_connection(&connection)?;
     mbtiles_setup(&connection)?;
     insert_metadata(&input_path, &connection)?;
-    walk_dir_image(&input_path, flag_scheme, flag_image_format, &connection)?;
+
+    walk_dir_image(&input_path, flag_scheme, flag_image_format, &output_path)?;
+
     debug!("tiles (and grids) inserted.");
     optimize_database(&connection)?;
     Ok(())
@@ -178,7 +181,7 @@ fn walk_dir_image(
     input: &Path,
     flag_scheme: Scheme,
     flag_image_format: ImageFormat,
-    connection: &Connection,
+    output_path: &Path,
 ) -> Result<(), MBTileError> {
     let base_components_length = input.components().count();
     let dir_walker = WalkDir::new(input)
@@ -187,37 +190,40 @@ fn walk_dir_image(
         .max_depth(3)
         .into_iter()
         .filter_entry(is_visible);
-    for entry_res in dir_walker {
+
+
+    dir_walker.par_bridge().try_for_each(|entry_res| {
         let entry = entry_res.desc("invalid entry")?;
         let entry_path = entry.path();
-        if entry_path.is_dir() {
-            // ignore directories
-            continue;
-        }
-        let end_comp: Vec<Component> = entry_path
-            .components()
-            .skip(base_components_length)
-            .collect();
-        if end_comp.len() == 3 {
-            parse_zoom_dir(end_comp[0], flag_scheme)
-                .and_then(|zoom| {
-                    parse_image_dir(end_comp[1], flag_scheme).and_then(|image_dir| {
-                        parse_filename_and_insert(
-                            end_comp[2],
-                            flag_scheme,
-                            flag_image_format,
-                            zoom,
-                            image_dir,
-                            entry_path,
-                            connection,
-                        )
+
+        if entry_path.is_file() {
+            let connection = mbtiles_connect(&output_path)?;
+            let end_comp: Vec<Component> = entry_path
+                .components()
+                .skip(base_components_length)
+                .collect();
+            if end_comp.len() == 3 {
+                parse_zoom_dir(end_comp[0], flag_scheme)
+                    .and_then(|zoom| {
+                        parse_image_dir(end_comp[1], flag_scheme).and_then(|image_dir| {
+                            parse_filename_and_insert(
+                                end_comp[2],
+                                flag_scheme,
+                                flag_image_format,
+                                zoom,
+                                image_dir,
+                                entry_path,
+                                &connection,
+                            )
+                        })
                     })
-                })
-                .unwrap_or_else(|err| error!("{}", err))
+                    .unwrap_or_else(|err| error!("{}", err))
+            }
+            info!("{}", entry.path().display());
         }
-        info!("{}", entry.path().display());
-    }
-    Ok(())
+
+        Ok(())
+    })
 }
 
 fn parse_comp(component: Component) -> Result<String, MBTileError> {
